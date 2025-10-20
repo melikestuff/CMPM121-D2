@@ -18,6 +18,7 @@ info.innerHTML =
 const controls = document.createElement("div");
 controls.className = "controls";
 
+// Buttons
 const clearBtn = document.createElement("button");
 clearBtn.textContent = "Clear";
 const undoBtn = document.createElement("button");
@@ -25,19 +26,28 @@ undoBtn.textContent = "Undo";
 const redoBtn = document.createElement("button");
 redoBtn.textContent = "Redo";
 
-controls.append(clearBtn, undoBtn, redoBtn);
+// Tool buttons
+const thinBtn = document.createElement("button");
+thinBtn.textContent = "Thin";
+const thickBtn = document.createElement("button");
+thickBtn.textContent = "Thick";
+
+// Add all buttons to controls
+controls.append(clearBtn, undoBtn, redoBtn, thinBtn, thickBtn);
 document.body.append(appTitle, canvas, controls, info);
 
 // --- Canvas setup ------------------------------------------------------------
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("2D context not available");
 
-// --- Command class -----------------------------------------------------------
+// --- Marker Command Class ----------------------------------------------------
 class MarkerLine {
   points: { x: number; y: number }[] = [];
+  thickness: number;
 
-  constructor(startX: number, startY: number) {
+  constructor(startX: number, startY: number, thickness: number) {
     this.points.push({ x: startX, y: startY });
+    this.thickness = thickness;
   }
 
   drag(x: number, y: number) {
@@ -53,7 +63,7 @@ class MarkerLine {
       ctx.lineTo(pt.x + 0.5, pt.y + 0.5);
     }
     ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = this.thickness;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.stroke();
@@ -61,11 +71,14 @@ class MarkerLine {
   }
 }
 
-// --- Display list & stacks ---------------------------------------------------
+// --- Display state -----------------------------------------------------------
 let displayList: MarkerLine[] = [];
 let redoStack: MarkerLine[] = [];
 let currentStroke: MarkerLine | null = null;
 let drawing = false;
+
+// --- Current tool (marker style) --------------------------------------------
+let currentThickness = 2; // default to thin
 
 // --- Utility -----------------------------------------------------------------
 function getCanvasCoords(ev: MouseEvent) {
@@ -76,11 +89,17 @@ function getCanvasCoords(ev: MouseEvent) {
   };
 }
 
+function updateToolSelection(selectedBtn: HTMLButtonElement) {
+  // Optional: simple visual feedback
+  [thinBtn, thickBtn].forEach((btn) => btn.classList.remove("selectedTool"));
+  selectedBtn.classList.add("selectedTool");
+}
+
 // --- Drawing Event Handlers --------------------------------------------------
 canvas.addEventListener("mousedown", (ev) => {
   const { x, y } = getCanvasCoords(ev);
   drawing = true;
-  currentStroke = new MarkerLine(x, y);
+  currentStroke = new MarkerLine(x, y, currentThickness);
   displayList.push(currentStroke);
   redoStack = []; // clear redo history
   canvas.dispatchEvent(new Event("drawing-changed"));
@@ -113,7 +132,7 @@ canvas.addEventListener("drawing-changed", () => {
   }
 });
 
-// --- Buttons -----------------------------------------------------------------
+// --- Button Handlers ---------------------------------------------------------
 clearBtn.addEventListener("click", () => {
   displayList = [];
   redoStack = [];
@@ -133,3 +152,17 @@ redoBtn.addEventListener("click", () => {
   displayList.push(restored);
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
+
+// Tool selection
+thinBtn.addEventListener("click", () => {
+  currentThickness = 2;
+  updateToolSelection(thinBtn);
+});
+
+thickBtn.addEventListener("click", () => {
+  currentThickness = 6;
+  updateToolSelection(thickBtn);
+});
+
+// Default selected tool
+updateToolSelection(thinBtn);
