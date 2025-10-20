@@ -18,33 +18,53 @@ info.innerHTML =
 const controls = document.createElement("div");
 controls.className = "controls";
 
-// Buttons
 const clearBtn = document.createElement("button");
-clearBtn.type = "button";
 clearBtn.textContent = "Clear";
-
 const undoBtn = document.createElement("button");
-undoBtn.type = "button";
 undoBtn.textContent = "Undo";
-
 const redoBtn = document.createElement("button");
-redoBtn.type = "button";
 redoBtn.textContent = "Redo";
 
-// Add buttons to controls
 controls.append(clearBtn, undoBtn, redoBtn);
-
-// Append elements to page
 document.body.append(appTitle, canvas, controls, info);
 
 // --- Canvas setup ------------------------------------------------------------
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("2D context not available");
 
-// --- Display list and redo stack ---------------------------------------------
-let displayList: { x: number; y: number }[][] = [];
-let redoStack: { x: number; y: number }[][] = [];
-let currentStroke: { x: number; y: number }[] | null = null;
+// --- Command class -----------------------------------------------------------
+class MarkerLine {
+  points: { x: number; y: number }[] = [];
+
+  constructor(startX: number, startY: number) {
+    this.points.push({ x: startX, y: startY });
+  }
+
+  drag(x: number, y: number) {
+    this.points.push({ x, y });
+  }
+
+  display(ctx: CanvasRenderingContext2D) {
+    if (this.points.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(this.points[0].x + 0.5, this.points[0].y + 0.5);
+    for (let i = 1; i < this.points.length; i++) {
+      const pt = this.points[i];
+      ctx.lineTo(pt.x + 0.5, pt.y + 0.5);
+    }
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    ctx.closePath();
+  }
+}
+
+// --- Display list & stacks ---------------------------------------------------
+let displayList: MarkerLine[] = [];
+let redoStack: MarkerLine[] = [];
+let currentStroke: MarkerLine | null = null;
 let drawing = false;
 
 // --- Utility -----------------------------------------------------------------
@@ -58,20 +78,18 @@ function getCanvasCoords(ev: MouseEvent) {
 
 // --- Drawing Event Handlers --------------------------------------------------
 canvas.addEventListener("mousedown", (ev) => {
-  drawing = true;
-  currentStroke = [];
   const { x, y } = getCanvasCoords(ev);
-  currentStroke.push({ x, y });
+  drawing = true;
+  currentStroke = new MarkerLine(x, y);
   displayList.push(currentStroke);
-  // Starting a new stroke should clear redo history
-  redoStack = [];
+  redoStack = []; // clear redo history
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
 globalThis.addEventListener("mousemove", (ev) => {
   if (!drawing || !currentStroke) return;
   const { x, y } = getCanvasCoords(ev as MouseEvent);
-  currentStroke.push({ x, y });
+  currentStroke.drag(x, y);
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
@@ -90,25 +108,12 @@ canvas.addEventListener("mouseleave", () => {
 // --- Redraw Observer ---------------------------------------------------------
 canvas.addEventListener("drawing-changed", () => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  for (const stroke of displayList) {
-    if (stroke.length < 2) continue;
-    ctx.beginPath();
-    ctx.moveTo(stroke[0].x + 0.5, stroke[0].y + 0.5);
-    for (let i = 1; i < stroke.length; i++) {
-      const pt = stroke[i];
-      ctx.lineTo(pt.x + 0.5, pt.y + 0.5);
-    }
-    ctx.stroke();
-    ctx.closePath();
+  for (const cmd of displayList) {
+    cmd.display(ctx);
   }
 });
 
-// --- Button Handlers ---------------------------------------------------------
+// --- Buttons -----------------------------------------------------------------
 clearBtn.addEventListener("click", () => {
   displayList = [];
   redoStack = [];
@@ -117,14 +122,14 @@ clearBtn.addEventListener("click", () => {
 
 undoBtn.addEventListener("click", () => {
   if (displayList.length === 0) return;
-  const lastStroke = displayList.pop()!;
-  redoStack.push(lastStroke);
+  const last = displayList.pop()!;
+  redoStack.push(last);
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
 redoBtn.addEventListener("click", () => {
   if (redoStack.length === 0) return;
-  const restoredStroke = redoStack.pop()!;
-  displayList.push(restoredStroke);
+  const restored = redoStack.pop()!;
+  displayList.push(restored);
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
