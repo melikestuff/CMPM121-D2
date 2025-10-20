@@ -33,7 +33,7 @@ thickBtn.textContent = "Thick";
 
 // Sticker buttons
 const stickerBtns: HTMLButtonElement[] = [];
-const stickerSet = ["⭐", "🌸", "🔥"]; // add more if you like
+const stickerSet = ["⭐", "🌸", "🔥"];
 for (const emoji of stickerSet) {
   const btn = document.createElement("button");
   btn.textContent = emoji;
@@ -44,8 +44,7 @@ controls.append(clearBtn, undoBtn, redoBtn, thinBtn, thickBtn, ...stickerBtns);
 document.body.append(appTitle, canvas, controls, info);
 
 // --- Canvas setup ------------------------------------------------------------
-const ctx = canvas.getContext("2d");
-if (!ctx) throw new Error("2D context not available");
+const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 
 // --- Command classes ---------------------------------------------------------
 class MarkerLine {
@@ -123,7 +122,6 @@ let currentSticker: StickerCommand | null = null;
 let drawing = false;
 let toolPreview: ToolPreview | null = null;
 
-// Current tool mode: "marker" or "sticker"
 let toolMode: "marker" | "sticker" = "marker";
 let currentThickness = 2;
 let currentStickerEmoji = "⭐";
@@ -172,7 +170,6 @@ globalThis.addEventListener("mousemove", (ev) => {
     currentSticker.drag(x, y);
     canvas.dispatchEvent(new Event("drawing-changed"));
   } else {
-    // Tool preview (for marker only)
     if (toolMode === "marker") {
       toolPreview = new ToolPreview(x, y, currentThickness);
     } else {
