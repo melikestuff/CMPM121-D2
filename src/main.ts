@@ -12,7 +12,8 @@ canvas.height = 256;
 canvas.setAttribute("aria-label", "Drawing canvas");
 
 const info = document.createElement("p");
-info.innerHTML = `Example image asset: <img src="${exampleIconUrl}" class="icon" />`;
+info.innerHTML =
+  `Example image asset: <img src="${exampleIconUrl}" class="icon" />`;
 
 const controls = document.createElement("div");
 controls.className = "controls";
@@ -25,34 +26,38 @@ undoBtn.textContent = "Undo";
 const redoBtn = document.createElement("button");
 redoBtn.textContent = "Redo";
 
-// Tool buttons
 const thinBtn = document.createElement("button");
 thinBtn.textContent = "Thin";
 const thickBtn = document.createElement("button");
 thickBtn.textContent = "Thick";
 
-// Add all buttons to controls
-controls.append(clearBtn, undoBtn, redoBtn, thinBtn, thickBtn);
+// Sticker buttons
+const stickerBtns: HTMLButtonElement[] = [];
+const stickerSet = ["⭐", "🌸", "🔥"]; // add more if you like
+for (const emoji of stickerSet) {
+  const btn = document.createElement("button");
+  btn.textContent = emoji;
+  stickerBtns.push(btn);
+}
+
+controls.append(clearBtn, undoBtn, redoBtn, thinBtn, thickBtn, ...stickerBtns);
 document.body.append(appTitle, canvas, controls, info);
 
 // --- Canvas setup ------------------------------------------------------------
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("2D context not available");
 
-// --- Marker Command Class ----------------------------------------------------
+// --- Command classes ---------------------------------------------------------
 class MarkerLine {
   points: { x: number; y: number }[] = [];
   thickness: number;
-
   constructor(startX: number, startY: number, thickness: number) {
     this.points.push({ x: startX, y: startY });
     this.thickness = thickness;
   }
-
   drag(x: number, y: number) {
     this.points.push({ x, y });
   }
-
   display(ctx: CanvasRenderingContext2D) {
     if (this.points.length < 2) return;
     ctx.beginPath();
@@ -70,18 +75,36 @@ class MarkerLine {
   }
 }
 
-// --- Tool Preview Command ----------------------------------------------------
+class StickerCommand {
+  emoji: string;
+  x: number;
+  y: number;
+  constructor(emoji: string, x: number, y: number) {
+    this.emoji = emoji;
+    this.x = x;
+    this.y = y;
+  }
+  drag(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+  display(ctx: CanvasRenderingContext2D) {
+    ctx.font = "24px serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.emoji, this.x, this.y);
+  }
+}
+
 class ToolPreview {
   x: number;
   y: number;
   thickness: number;
-
   constructor(x: number, y: number, thickness: number) {
     this.x = x;
     this.y = y;
     this.thickness = thickness;
   }
-
   display(ctx: CanvasRenderingContext2D) {
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.thickness / 2, 0, Math.PI * 2);
@@ -93,12 +116,17 @@ class ToolPreview {
 }
 
 // --- State -------------------------------------------------------------------
-let displayList: MarkerLine[] = [];
-let redoStack: MarkerLine[] = [];
+let displayList: (MarkerLine | StickerCommand)[] = [];
+let redoStack: (MarkerLine | StickerCommand)[] = [];
 let currentStroke: MarkerLine | null = null;
+let currentSticker: StickerCommand | null = null;
 let drawing = false;
-let currentThickness = 2; // default tool
 let toolPreview: ToolPreview | null = null;
+
+// Current tool mode: "marker" or "sticker"
+let toolMode: "marker" | "sticker" = "marker";
+let currentThickness = 2;
+let currentStickerEmoji = "⭐";
 
 // --- Utility -----------------------------------------------------------------
 function getCanvasCoords(ev: MouseEvent) {
@@ -110,61 +138,73 @@ function getCanvasCoords(ev: MouseEvent) {
 }
 
 function updateToolSelection(selectedBtn: HTMLButtonElement) {
-  [thinBtn, thickBtn].forEach((btn) => btn.classList.remove("selectedTool"));
+  [thinBtn, thickBtn, ...stickerBtns].forEach((btn) =>
+    btn.classList.remove("selectedTool")
+  );
   selectedBtn.classList.add("selectedTool");
 }
 
-// --- Drawing Handlers --------------------------------------------------------
+// --- Event Handlers ----------------------------------------------------------
 canvas.addEventListener("mousedown", (ev) => {
   const { x, y } = getCanvasCoords(ev);
-  drawing = true;
-  currentStroke = new MarkerLine(x, y, currentThickness);
-  displayList.push(currentStroke);
-  redoStack = [];
+
+  if (toolMode === "marker") {
+    drawing = true;
+    currentStroke = new MarkerLine(x, y, currentThickness);
+    displayList.push(currentStroke);
+    redoStack = [];
+  } else if (toolMode === "sticker") {
+    currentSticker = new StickerCommand(currentStickerEmoji, x, y);
+    displayList.push(currentSticker);
+    redoStack = [];
+  }
+
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
 globalThis.addEventListener("mousemove", (ev) => {
   const { x, y } = getCanvasCoords(ev as MouseEvent);
 
-  if (drawing && currentStroke) {
+  if (toolMode === "marker" && drawing && currentStroke) {
     currentStroke.drag(x, y);
     canvas.dispatchEvent(new Event("drawing-changed"));
+  } else if (toolMode === "sticker" && currentSticker) {
+    currentSticker.drag(x, y);
+    canvas.dispatchEvent(new Event("drawing-changed"));
   } else {
-    // Update tool preview position when not drawing
-    toolPreview = new ToolPreview(x, y, currentThickness);
+    // Tool preview (for marker only)
+    if (toolMode === "marker") {
+      toolPreview = new ToolPreview(x, y, currentThickness);
+    } else {
+      toolPreview = null;
+    }
     canvas.dispatchEvent(new Event("tool-moved"));
   }
 });
 
 globalThis.addEventListener("mouseup", () => {
-  if (!drawing) return;
   drawing = false;
   currentStroke = null;
+  currentSticker = null;
 });
 
 canvas.addEventListener("mouseleave", () => {
-  if (drawing) {
-    drawing = false;
-    currentStroke = null;
-  }
+  drawing = false;
+  currentStroke = null;
+  currentSticker = null;
   toolPreview = null;
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
 // --- Redraw Observers --------------------------------------------------------
-canvas.addEventListener("drawing-changed", () => {
+function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (const cmd of displayList) cmd.display(ctx);
-  // also draw tool preview if visible
   if (!drawing && toolPreview) toolPreview.display(ctx);
-});
+}
 
-canvas.addEventListener("tool-moved", () => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (const cmd of displayList) cmd.display(ctx);
-  if (!drawing && toolPreview) toolPreview.display(ctx);
-});
+canvas.addEventListener("drawing-changed", redraw);
+canvas.addEventListener("tool-moved", redraw);
 
 // --- Buttons -----------------------------------------------------------------
 clearBtn.addEventListener("click", () => {
@@ -175,28 +215,37 @@ clearBtn.addEventListener("click", () => {
 
 undoBtn.addEventListener("click", () => {
   if (displayList.length === 0) return;
-  const last = displayList.pop()!;
-  redoStack.push(last);
+  redoStack.push(displayList.pop()!);
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
 redoBtn.addEventListener("click", () => {
   if (redoStack.length === 0) return;
-  const restored = redoStack.pop()!;
-  displayList.push(restored);
+  displayList.push(redoStack.pop()!);
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
-// Tool selection
+// Marker tool selection
 thinBtn.addEventListener("click", () => {
+  toolMode = "marker";
   currentThickness = 2;
   updateToolSelection(thinBtn);
 });
 
 thickBtn.addEventListener("click", () => {
+  toolMode = "marker";
   currentThickness = 6;
   updateToolSelection(thickBtn);
 });
+
+// Sticker tool selection
+for (const btn of stickerBtns) {
+  btn.addEventListener("click", () => {
+    toolMode = "sticker";
+    currentStickerEmoji = btn.textContent!;
+    updateToolSelection(btn);
+  });
+}
 
 // Default selected tool
 updateToolSelection(thinBtn);
