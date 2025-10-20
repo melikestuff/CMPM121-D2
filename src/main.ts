@@ -12,8 +12,7 @@ canvas.height = 256;
 canvas.setAttribute("aria-label", "Drawing canvas");
 
 const info = document.createElement("p");
-info.innerHTML =
-  `Example image asset: <img src="${exampleIconUrl}" class="icon" />`;
+info.innerHTML = `Example image asset: <img src="${exampleIconUrl}" class="icon" />`;
 
 const controls = document.createElement("div");
 controls.className = "controls";
@@ -71,14 +70,35 @@ class MarkerLine {
   }
 }
 
-// --- Display state -----------------------------------------------------------
+// --- Tool Preview Command ----------------------------------------------------
+class ToolPreview {
+  x: number;
+  y: number;
+  thickness: number;
+
+  constructor(x: number, y: number, thickness: number) {
+    this.x = x;
+    this.y = y;
+    this.thickness = thickness;
+  }
+
+  display(ctx: CanvasRenderingContext2D) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.thickness / 2, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.closePath();
+  }
+}
+
+// --- State -------------------------------------------------------------------
 let displayList: MarkerLine[] = [];
 let redoStack: MarkerLine[] = [];
 let currentStroke: MarkerLine | null = null;
 let drawing = false;
-
-// --- Current tool (marker style) --------------------------------------------
-let currentThickness = 2; // default to thin
+let currentThickness = 2; // default tool
+let toolPreview: ToolPreview | null = null;
 
 // --- Utility -----------------------------------------------------------------
 function getCanvasCoords(ev: MouseEvent) {
@@ -90,26 +110,31 @@ function getCanvasCoords(ev: MouseEvent) {
 }
 
 function updateToolSelection(selectedBtn: HTMLButtonElement) {
-  // Optional: simple visual feedback
   [thinBtn, thickBtn].forEach((btn) => btn.classList.remove("selectedTool"));
   selectedBtn.classList.add("selectedTool");
 }
 
-// --- Drawing Event Handlers --------------------------------------------------
+// --- Drawing Handlers --------------------------------------------------------
 canvas.addEventListener("mousedown", (ev) => {
   const { x, y } = getCanvasCoords(ev);
   drawing = true;
   currentStroke = new MarkerLine(x, y, currentThickness);
   displayList.push(currentStroke);
-  redoStack = []; // clear redo history
+  redoStack = [];
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
 globalThis.addEventListener("mousemove", (ev) => {
-  if (!drawing || !currentStroke) return;
   const { x, y } = getCanvasCoords(ev as MouseEvent);
-  currentStroke.drag(x, y);
-  canvas.dispatchEvent(new Event("drawing-changed"));
+
+  if (drawing && currentStroke) {
+    currentStroke.drag(x, y);
+    canvas.dispatchEvent(new Event("drawing-changed"));
+  } else {
+    // Update tool preview position when not drawing
+    toolPreview = new ToolPreview(x, y, currentThickness);
+    canvas.dispatchEvent(new Event("tool-moved"));
+  }
 });
 
 globalThis.addEventListener("mouseup", () => {
@@ -119,20 +144,29 @@ globalThis.addEventListener("mouseup", () => {
 });
 
 canvas.addEventListener("mouseleave", () => {
-  if (!drawing) return;
-  drawing = false;
-  currentStroke = null;
+  if (drawing) {
+    drawing = false;
+    currentStroke = null;
+  }
+  toolPreview = null;
+  canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
-// --- Redraw Observer ---------------------------------------------------------
+// --- Redraw Observers --------------------------------------------------------
 canvas.addEventListener("drawing-changed", () => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (const cmd of displayList) {
-    cmd.display(ctx);
-  }
+  for (const cmd of displayList) cmd.display(ctx);
+  // also draw tool preview if visible
+  if (!drawing && toolPreview) toolPreview.display(ctx);
 });
 
-// --- Button Handlers ---------------------------------------------------------
+canvas.addEventListener("tool-moved", () => {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const cmd of displayList) cmd.display(ctx);
+  if (!drawing && toolPreview) toolPreview.display(ctx);
+});
+
+// --- Buttons -----------------------------------------------------------------
 clearBtn.addEventListener("click", () => {
   displayList = [];
   redoStack = [];
