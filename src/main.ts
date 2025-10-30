@@ -18,7 +18,7 @@ info.innerHTML =
 const controls = document.createElement("div");
 controls.className = "controls";
 
-// Buttons
+// --- Buttons ----------------------------------------------------------------
 const clearBtn = document.createElement("button");
 clearBtn.textContent = "Clear";
 const undoBtn = document.createElement("button");
@@ -31,7 +31,7 @@ thinBtn.textContent = "Thin";
 const thickBtn = document.createElement("button");
 thickBtn.textContent = "Thick";
 
-// Sticker buttons
+// Sticker buttons (default set)
 const stickerBtns: HTMLButtonElement[] = [];
 const stickerSet = ["⭐", "🌸", "🔥"];
 for (const emoji of stickerSet) {
@@ -40,7 +40,20 @@ for (const emoji of stickerSet) {
   stickerBtns.push(btn);
 }
 
-controls.append(clearBtn, undoBtn, redoBtn, thinBtn, thickBtn, ...stickerBtns);
+// Custom sticker button
+const addStickerBtn = document.createElement("button");
+addStickerBtn.textContent = "+ Custom";
+
+// Assemble toolbar
+controls.append(
+  clearBtn,
+  undoBtn,
+  redoBtn,
+  thinBtn,
+  thickBtn,
+  ...stickerBtns,
+  addStickerBtn,
+);
 document.body.append(appTitle, canvas, controls, info);
 
 // --- Canvas setup ------------------------------------------------------------
@@ -136,7 +149,7 @@ function getCanvasCoords(ev: MouseEvent) {
 }
 
 function updateToolSelection(selectedBtn: HTMLButtonElement) {
-  [thinBtn, thickBtn, ...stickerBtns].forEach((btn) =>
+  [thinBtn, thickBtn, ...stickerBtns, addStickerBtn].forEach((btn) =>
     btn.classList.remove("selectedTool")
   );
   selectedBtn.classList.add("selectedTool");
@@ -145,7 +158,6 @@ function updateToolSelection(selectedBtn: HTMLButtonElement) {
 // --- Event Handlers ----------------------------------------------------------
 canvas.addEventListener("mousedown", (ev) => {
   const { x, y } = getCanvasCoords(ev);
-
   if (toolMode === "marker") {
     drawing = true;
     currentStroke = new MarkerLine(x, y, currentThickness);
@@ -156,13 +168,11 @@ canvas.addEventListener("mousedown", (ev) => {
     displayList.push(currentSticker);
     redoStack = [];
   }
-
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
 globalThis.addEventListener("mousemove", (ev) => {
   const { x, y } = getCanvasCoords(ev as MouseEvent);
-
   if (toolMode === "marker" && drawing && currentStroke) {
     currentStroke.drag(x, y);
     canvas.dispatchEvent(new Event("drawing-changed"));
@@ -170,11 +180,9 @@ globalThis.addEventListener("mousemove", (ev) => {
     currentSticker.drag(x, y);
     canvas.dispatchEvent(new Event("drawing-changed"));
   } else {
-    if (toolMode === "marker") {
-      toolPreview = new ToolPreview(x, y, currentThickness);
-    } else {
-      toolPreview = null;
-    }
+    toolPreview = toolMode === "marker"
+      ? new ToolPreview(x, y, currentThickness)
+      : null;
     canvas.dispatchEvent(new Event("tool-moved"));
   }
 });
@@ -236,13 +244,29 @@ thickBtn.addEventListener("click", () => {
 });
 
 // Sticker tool selection
-for (const btn of stickerBtns) {
+function attachStickerHandler(btn: HTMLButtonElement) {
   btn.addEventListener("click", () => {
     toolMode = "sticker";
     currentStickerEmoji = btn.textContent!;
     updateToolSelection(btn);
   });
 }
+
+for (const btn of stickerBtns) attachStickerHandler(btn);
+
+// Custom sticker creation
+addStickerBtn.addEventListener("click", () => {
+  const newEmoji = prompt("Custom sticker text", "🧽");
+  if (!newEmoji) return;
+  const newBtn = document.createElement("button");
+  newBtn.textContent = newEmoji;
+  stickerBtns.push(newBtn);
+  attachStickerHandler(newBtn);
+  controls.insertBefore(newBtn, addStickerBtn); // place before the +Custom button
+  toolMode = "sticker";
+  currentStickerEmoji = newEmoji;
+  updateToolSelection(newBtn);
+});
 
 // Default selected tool
 updateToolSelection(thinBtn);
