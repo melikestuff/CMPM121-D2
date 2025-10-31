@@ -67,7 +67,12 @@ class MarkerLine {
   points: { x: number; y: number }[] = [];
   thickness: number;
   color: string;
-  constructor(startX: number, startY: number, thickness: number, color: string) {
+  constructor(
+    startX: number,
+    startY: number,
+    thickness: number,
+    color: string,
+  ) {
     this.points.push({ x: startX, y: startY });
     this.thickness = thickness;
     this.color = color;
@@ -129,7 +134,14 @@ class ToolPreview {
   color: string;
   emoji: string | null;
   rotation: number;
-  constructor(x: number, y: number, thickness: number, color: string, emoji: string | null, rotation: number) {
+  constructor(
+    x: number,
+    y: number,
+    thickness: number,
+    color: string,
+    emoji: string | null,
+    rotation: number,
+  ) {
     this.x = x;
     this.y = y;
     this.thickness = thickness;
@@ -205,7 +217,12 @@ canvas.addEventListener("mousedown", (ev) => {
     displayList.push(currentStroke);
     redoStack = [];
   } else if (toolMode === "sticker") {
-    currentSticker = new StickerCommand(currentStickerEmoji, x, y, currentRotation);
+    currentSticker = new StickerCommand(
+      currentStickerEmoji,
+      x,
+      y,
+      currentRotation,
+    );
     displayList.push(currentSticker);
     redoStack = [];
   }
@@ -223,7 +240,14 @@ globalThis.addEventListener("mousemove", (ev) => {
   } else {
     toolPreview = toolMode === "marker"
       ? new ToolPreview(x, y, currentThickness, currentColor, null, 0)
-      : new ToolPreview(x, y, currentThickness, "#000", currentStickerEmoji, currentRotation);
+      : new ToolPreview(
+        x,
+        y,
+        currentThickness,
+        "#000",
+        currentStickerEmoji,
+        currentRotation,
+      );
     canvas.dispatchEvent(new Event("tool-moved"));
   }
 });
@@ -291,7 +315,7 @@ exportBtn.addEventListener("click", () => {
 thinBtn.addEventListener("click", () => {
   toolMode = "marker";
   currentThickness = 2;
-  currentColor = randomColor(); 
+  currentColor = randomColor();
   updateToolSelection(thinBtn);
 });
 
@@ -307,7 +331,7 @@ function attachStickerHandler(btn: HTMLButtonElement) {
   btn.addEventListener("click", () => {
     toolMode = "sticker";
     currentStickerEmoji = btn.textContent!;
-    currentRotation = randomRotation(); 
+    currentRotation = randomRotation();
     updateToolSelection(btn);
   });
 }
