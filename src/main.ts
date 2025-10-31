@@ -25,13 +25,15 @@ const undoBtn = document.createElement("button");
 undoBtn.textContent = "Undo";
 const redoBtn = document.createElement("button");
 redoBtn.textContent = "Redo";
+const exportBtn = document.createElement("button");
+exportBtn.textContent = "Export";
 
 const thinBtn = document.createElement("button");
 thinBtn.textContent = "Thin";
 const thickBtn = document.createElement("button");
 thickBtn.textContent = "Thick";
 
-// Sticker buttons (default set)
+// Sticker buttons (default)
 const stickerBtns: HTMLButtonElement[] = [];
 const stickerSet = ["⭐", "🌸", "🔥"];
 for (const emoji of stickerSet) {
@@ -49,6 +51,7 @@ controls.append(
   clearBtn,
   undoBtn,
   redoBtn,
+  exportBtn,
   thinBtn,
   thickBtn,
   ...stickerBtns,
@@ -230,6 +233,27 @@ redoBtn.addEventListener("click", () => {
   canvas.dispatchEvent(new Event("drawing-changed"));
 });
 
+// --- Export Button -----------------------------------------------------------
+exportBtn.addEventListener("click", () => {
+  // 1️ Create a new off-screen canvas
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width = 1024;
+  exportCanvas.height = 1024;
+  const exportCtx = exportCanvas.getContext("2d") as CanvasRenderingContext2D;
+
+  // 2️ Scale up by 4x (1024/256 = 4)
+  exportCtx.scale(4, 4);
+
+  // 3️ Redraw everything (no preview)
+  for (const cmd of displayList) cmd.display(exportCtx);
+
+  // 4️ Trigger file download
+  const link = document.createElement("a");
+  link.href = exportCanvas.toDataURL("image/png");
+  link.download = "sketchpad.png";
+  link.click();
+});
+
 // Marker tool selection
 thinBtn.addEventListener("click", () => {
   toolMode = "marker";
@@ -251,7 +275,6 @@ function attachStickerHandler(btn: HTMLButtonElement) {
     updateToolSelection(btn);
   });
 }
-
 for (const btn of stickerBtns) attachStickerHandler(btn);
 
 // Custom sticker creation
@@ -262,7 +285,7 @@ addStickerBtn.addEventListener("click", () => {
   newBtn.textContent = newEmoji;
   stickerBtns.push(newBtn);
   attachStickerHandler(newBtn);
-  controls.insertBefore(newBtn, addStickerBtn); // place before the +Custom button
+  controls.insertBefore(newBtn, addStickerBtn);
   toolMode = "sticker";
   currentStickerEmoji = newEmoji;
   updateToolSelection(newBtn);
