@@ -73,16 +73,19 @@ class MarkerLine {
   drag(x: number, y: number) {
     this.points.push({ x, y });
   }
-  display(ctx: CanvasRenderingContext2D) {
+  display(ctx: CanvasRenderingContext2D, scale = 1) {
     if (this.points.length < 2) return;
     ctx.beginPath();
-    ctx.moveTo(this.points[0].x + 0.5, this.points[0].y + 0.5);
+    ctx.moveTo(
+      (this.points[0].x + 0.5) * scale,
+      (this.points[0].y + 0.5) * scale,
+    );
     for (let i = 1; i < this.points.length; i++) {
       const pt = this.points[i];
-      ctx.lineTo(pt.x + 0.5, pt.y + 0.5);
+      ctx.lineTo((pt.x + 0.5) * scale, (pt.y + 0.5) * scale);
     }
     ctx.strokeStyle = "#000";
-    ctx.lineWidth = this.thickness;
+    ctx.lineWidth = this.thickness * scale;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.stroke();
@@ -103,11 +106,11 @@ class StickerCommand {
     this.x = x;
     this.y = y;
   }
-  display(ctx: CanvasRenderingContext2D) {
-    ctx.font = "24px serif";
+  display(ctx: CanvasRenderingContext2D, scale = 1) {
+    ctx.font = `${24 * scale}px serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(this.emoji, this.x, this.y);
+    ctx.fillText(this.emoji, this.x * scale, this.y * scale);
   }
 }
 
@@ -235,19 +238,15 @@ redoBtn.addEventListener("click", () => {
 
 // --- Export Button -----------------------------------------------------------
 exportBtn.addEventListener("click", () => {
-  // 1️ Create a new off-screen canvas
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = 1024;
   exportCanvas.height = 1024;
   const exportCtx = exportCanvas.getContext("2d") as CanvasRenderingContext2D;
 
-  // 2️ Scale up by 4x (1024/256 = 4)
-  exportCtx.scale(4, 4);
+  const scale = 4;
 
-  // 3️ Redraw everything (no preview)
-  for (const cmd of displayList) cmd.display(exportCtx);
+  for (const cmd of displayList) cmd.display(exportCtx, scale);
 
-  // 4️ Trigger file download
   const link = document.createElement("a");
   link.href = exportCanvas.toDataURL("image/png");
   link.download = "sketchpad.png";
