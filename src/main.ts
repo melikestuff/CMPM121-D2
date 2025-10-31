@@ -66,9 +66,11 @@ const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 class MarkerLine {
   points: { x: number; y: number }[] = [];
   thickness: number;
-  constructor(startX: number, startY: number, thickness: number) {
+  color: string;
+  constructor(startX: number, startY: number, thickness: number, color: string) {
     this.points.push({ x: startX, y: startY });
     this.thickness = thickness;
+    this.color = color;
   }
   drag(x: number, y: number) {
     this.points.push({ x, y });
@@ -84,7 +86,7 @@ class MarkerLine {
       const pt = this.points[i];
       ctx.lineTo((pt.x + 0.5) * scale, (pt.y + 0.5) * scale);
     }
-    ctx.strokeStyle = "#000";
+    ctx.strokeStyle = this.color;
     ctx.lineWidth = this.thickness * scale;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -97,20 +99,26 @@ class StickerCommand {
   emoji: string;
   x: number;
   y: number;
-  constructor(emoji: string, x: number, y: number) {
+  rotation: number;
+  constructor(emoji: string, x: number, y: number, rotation: number) {
     this.emoji = emoji;
     this.x = x;
     this.y = y;
+    this.rotation = rotation;
   }
   drag(x: number, y: number) {
     this.x = x;
     this.y = y;
   }
   display(ctx: CanvasRenderingContext2D, scale = 1) {
+    ctx.save();
+    ctx.translate(this.x * scale, this.y * scale);
+    ctx.rotate((this.rotation * Math.PI) / 180);
     ctx.font = `${24 * scale}px serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(this.emoji, this.x * scale, this.y * scale);
+    ctx.fillText(this.emoji, 0, 0);
+    ctx.restore();
   }
 }
 
@@ -118,18 +126,34 @@ class ToolPreview {
   x: number;
   y: number;
   thickness: number;
-  constructor(x: number, y: number, thickness: number) {
+  color: string;
+  emoji: string | null;
+  rotation: number;
+  constructor(x: number, y: number, thickness: number, color: string, emoji: string | null, rotation: number) {
     this.x = x;
     this.y = y;
     this.thickness = thickness;
+    this.color = color;
+    this.emoji = emoji;
+    this.rotation = rotation;
   }
   display(ctx: CanvasRenderingContext2D) {
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.thickness / 2, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.closePath();
+    ctx.save();
+    if (this.emoji) {
+      ctx.translate(this.x, this.y);
+      ctx.rotate((this.rotation * Math.PI) / 180);
+      ctx.font = "24px serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(this.emoji, 0, 0);
+    } else {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.thickness / 2, 0, Math.PI * 2);
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 }
 
@@ -144,8 +168,19 @@ let toolPreview: ToolPreview | null = null;
 let toolMode: "marker" | "sticker" = "marker";
 let currentThickness = 2;
 let currentStickerEmoji = "⭐";
+let currentColor = randomColor();
+let currentRotation = randomRotation();
 
 // --- Utility -----------------------------------------------------------------
+function randomColor() {
+  const hue = Math.floor(Math.random() * 360);
+  return `hsl(${hue}, 100%, 30%)`;
+}
+
+function randomRotation() {
+  return Math.floor(Math.random() * 360);
+}
+
 function getCanvasCoords(ev: MouseEvent) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -166,11 +201,11 @@ canvas.addEventListener("mousedown", (ev) => {
   const { x, y } = getCanvasCoords(ev);
   if (toolMode === "marker") {
     drawing = true;
-    currentStroke = new MarkerLine(x, y, currentThickness);
+    currentStroke = new MarkerLine(x, y, currentThickness, currentColor);
     displayList.push(currentStroke);
     redoStack = [];
   } else if (toolMode === "sticker") {
-    currentSticker = new StickerCommand(currentStickerEmoji, x, y);
+    currentSticker = new StickerCommand(currentStickerEmoji, x, y, currentRotation);
     displayList.push(currentSticker);
     redoStack = [];
   }
@@ -187,8 +222,8 @@ globalThis.addEventListener("mousemove", (ev) => {
     canvas.dispatchEvent(new Event("drawing-changed"));
   } else {
     toolPreview = toolMode === "marker"
-      ? new ToolPreview(x, y, currentThickness)
-      : null;
+      ? new ToolPreview(x, y, currentThickness, currentColor, null, 0)
+      : new ToolPreview(x, y, currentThickness, "#000", currentStickerEmoji, currentRotation);
     canvas.dispatchEvent(new Event("tool-moved"));
   }
 });
@@ -213,7 +248,6 @@ function redraw() {
   for (const cmd of displayList) cmd.display(ctx);
   if (!drawing && toolPreview) toolPreview.display(ctx);
 }
-
 canvas.addEventListener("drawing-changed", redraw);
 canvas.addEventListener("tool-moved", redraw);
 
@@ -257,12 +291,14 @@ exportBtn.addEventListener("click", () => {
 thinBtn.addEventListener("click", () => {
   toolMode = "marker";
   currentThickness = 2;
+  currentColor = randomColor(); 
   updateToolSelection(thinBtn);
 });
 
 thickBtn.addEventListener("click", () => {
   toolMode = "marker";
   currentThickness = 6;
+  currentColor = randomColor();
   updateToolSelection(thickBtn);
 });
 
@@ -271,6 +307,7 @@ function attachStickerHandler(btn: HTMLButtonElement) {
   btn.addEventListener("click", () => {
     toolMode = "sticker";
     currentStickerEmoji = btn.textContent!;
+    currentRotation = randomRotation(); 
     updateToolSelection(btn);
   });
 }
@@ -287,6 +324,7 @@ addStickerBtn.addEventListener("click", () => {
   controls.insertBefore(newBtn, addStickerBtn);
   toolMode = "sticker";
   currentStickerEmoji = newEmoji;
+  currentRotation = randomRotation();
   updateToolSelection(newBtn);
 });
 
